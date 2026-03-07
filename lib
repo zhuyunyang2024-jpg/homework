@@ -1,0 +1,236 @@
+import json
+import os
+from datetime import datetime
+
+# 定义图书类 - 封装图书属性和行为
+class Book:
+    def __init__(self, book_id, title, author, category, is_available=True):
+        self.book_id = book_id          # 图书编号（唯一标识）
+        self.title = title              # 书名
+        self.author = author            # 作者
+        self.category = category        # 分类
+        self.is_available = is_available # 是否可借
+        self.borrower = None            # 借阅人
+        self.borrow_date = None         # 借阅日期
+
+    # 将图书对象转为字典（便于存储）
+    def to_dict(self):
+        return {
+            "book_id": self.book_id,
+            "title": self.title,
+            "author": self.author,
+            "category": self.category,
+            "is_available": self.is_available,
+            "borrower": self.borrower,
+            "borrow_date": self.borrow_date.strftime("%Y-%m-%d") if self.borrow_date else None
+        }
+
+    # 从字典创建图书对象
+    @classmethod
+    def from_dict(cls, data):
+        book = cls(
+            data["book_id"],
+            data["title"],
+            data["author"],
+            data["category"],
+            data["is_available"]
+        )
+        book.borrower = data["borrower"]
+        if data["borrow_date"]:
+            book.borrow_date = datetime.strptime(data["borrow_date"], "%Y-%m-%d")
+        return book
+
+# 定义图书管理系统类 - 核心业务逻辑
+class LibrarySystem:
+    def __init__(self, data_file="library_data.json"):
+        self.data_file = data_file      # 数据存储文件
+        self.books = []                 # 图书列表
+        self.load_data()                # 初始化时加载数据
+
+    # 加载数据（从文件读取）
+    def load_data(self):
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.books = [Book.from_dict(book_data) for book_data in data]
+                print(f"✅ 成功加载 {len(self.books)} 本图书数据")
+            except Exception as e:
+                print(f"❌ 加载数据失败: {e}")
+                self.books = []
+        else:
+            print("📁 数据文件不存在，将创建新文件")
+            self.books = []
+
+    # 保存数据（写入文件）
+    def save_data(self):
+        try:
+            with open(self.data_file, "w", encoding="utf-8") as f:
+                json.dump([book.to_dict() for book in self.books], f, ensure_ascii=False, indent=2)
+            print("✅ 数据已保存")
+        except Exception as e:
+            print(f"❌ 保存数据失败: {e}")
+
+    # 1. 添加图书（输入功能）
+    def add_book(self):
+        print("\n===== 添加新图书 =====")
+        book_id = input("请输入图书编号（唯一）: ")
+        
+        # 检查编号是否重复
+        if any(book.book_id == book_id for book in self.books):
+            print("❌ 该图书编号已存在！")
+            return
+        
+        title = input("请输入书名: ")
+        author = input("请输入作者: ")
+        category = input("请输入分类（如：小说/科技/教育）: ")
+        
+        # 创建图书对象并添加
+        new_book = Book(book_id, title, author, category)
+        self.books.append(new_book)
+        self.save_data()
+        print(f"✅ 图书《{title}》添加成功！")
+
+    # 2. 借阅图书（输入+业务逻辑）
+    def borrow_book(self):
+        print("\n===== 借阅图书 =====")
+        book_id = input("请输入要借阅的图书编号: ")
+        borrower_name = input("请输入借阅人姓名: ")
+        
+        # 查找图书
+        target_book = None
+        for book in self.books:
+            if book.book_id == book_id:
+                target_book = book
+                break
+        
+        if not target_book:
+            print("❌ 未找到该图书！")
+            return
+        
+        if not target_book.is_available:
+            print(f"❌ 图书《{target_book.title}》已被 {target_book.borrower} 借阅！")
+            return
+        
+        # 执行借阅操作
+        target_book.is_available = False
+        target_book.borrower = borrower_name
+        target_book.borrow_date = datetime.now()
+        self.save_data()
+        print(f"✅ 借阅成功！《{target_book.title}》已借给 {borrower_name}")
+
+    # 3. 归还图书（输入+业务逻辑）
+    def return_book(self):
+        print("\n===== 归还图书 =====")
+        book_id = input("请输入要归还的图书编号: ")
+        
+        # 查找图书
+        target_book = None
+        for book in self.books:
+            if book.book_id == book_id:
+                target_book = book
+                break
+        
+        if not target_book:
+            print("❌ 未找到该图书！")
+            return
+        
+        if target_book.is_available:
+            print(f"❌ 图书《{target_book.title}》未被借阅，无需归还！")
+            return
+        
+        # 执行归还操作
+        borrower = target_book.borrower
+        target_book.is_available = True
+        target_book.borrower = None
+        target_book.borrow_date = None
+        self.save_data()
+        print(f"✅ 归还成功！{borrower} 已归还《{target_book.title}》")
+
+    # 4. 查看所有图书（输出功能）
+    def view_all_books(self):
+        print("\n===== 图书列表 =====")
+        if not self.books:
+            print("📚 暂无图书数据")
+            return
+        
+        # 格式化输出
+        print(f"{'编号':<10} {'书名':<20} {'作者':<15} {'分类':<10} {'状态':<10} {'借阅人':<10}")
+        print("-" * 80)
+        for book in self.books:
+            status = "可借" if book.is_available else "已借出"
+            borrower = book.borrower if book.borrower else "-"
+            print(f"{book.book_id:<10} {book.title:<20} {book.author:<15} {book.category:<10} {status:<10} {borrower:<10}")
+
+    # 5. 搜索图书（输入+输出）
+    def search_book(self):
+        print("\n===== 搜索图书 =====")
+        keyword = input("请输入书名/作者/分类关键词: ").lower()
+        results = []
+        
+        for book in self.books:
+            if (keyword in book.title.lower() or 
+                keyword in book.author.lower() or 
+                keyword in book.category.lower()):
+                results.append(book)
+        
+        # 输出搜索结果
+        if not results:
+            print("❌ 未找到匹配的图书")
+            return
+        
+        print(f"\n🔍 找到 {len(results)} 本匹配的图书：")
+        print(f"{'编号':<10} {'书名':<20} {'作者':<15} {'状态':<10}")
+        print("-" * 60)
+        for book in results:
+            status = "可借" if book.is_available else "已借出"
+            print(f"{book.book_id:<10} {book.title:<20} {book.author:<15} {status:<10}")
+
+    # 显示主菜单
+    def show_menu(self):
+        print("\n" + "="*40)
+        print("      图书租借管理系统")
+        print("="*40)
+        print("1. 添加新图书")
+        print("2. 借阅图书")
+        print("3. 归还图书")
+        print("4. 查看所有图书")
+        print("5. 搜索图书")
+        print("0. 退出系统")
+        print("="*40)
+
+# 主程序入口
+def main():
+    # 创建系统实例
+    library = LibrarySystem()
+    
+    while True:
+        # 显示菜单
+        library.show_menu()
+        
+        # 获取用户输入
+        choice = input("请输入操作编号: ")
+        
+        # 处理用户选择
+        if choice == "1":
+            library.add_book()
+        elif choice == "2":
+            library.borrow_book()
+        elif choice == "3":
+            library.return_book()
+        elif choice == "4":
+            library.view_all_books()
+        elif choice == "5":
+            library.search_book()
+        elif choice == "0":
+            print("\n👋 感谢使用图书租借管理系统，再见！")
+            break
+        else:
+            print("\n❌ 无效的输入，请重新选择！")
+        
+        # 按回车继续
+        input("\n按回车键返回主菜单...")
+
+# 程序启动
+if __name__ == "__main__":
+    main()
